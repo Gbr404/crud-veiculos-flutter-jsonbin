@@ -13,7 +13,7 @@ class _BrandScreenState extends State<BrandScreen> {
   final _service = BrandService();
   late Future<List<Map<String, dynamic>>> _brands;
   final TextEditingController _nameController = TextEditingController();
-  String? _editingId;
+  String? _editingId; // Armazena o ID da marca em edição
 
   @override
   void initState() {
@@ -21,44 +21,83 @@ class _BrandScreenState extends State<BrandScreen> {
     _brands = _service.getBrands();
   }
 
+  // Recarrega a lista de marcas
   Future<void> _refresh() async {
     setState(() {
       _brands = _service.getBrands();
     });
   }
 
+  // Abre a caixa de diálogo para Adicionar ou Editar
+  void _openSaveDialog({Map<String, dynamic>? brand}) {
+    // Se for edição, pré-preenche os campos
+    _editingId = brand?['id']?.toString();
+    _nameController.text = brand?['name'] ?? '';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(_editingId == null ? 'Adicionar Nova Marca' : 'Editar Marca'),
+        content: TextField(
+          controller: _nameController,
+          decoration: const InputDecoration(
+            labelText: 'Nome da Marca',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              _nameController.clear();
+              _editingId = null;
+              Navigator.pop(context);
+            },
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => _save(),
+            child: Text(_editingId == null ? 'Adicionar' : 'Salvar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Lógica de Salvar (Adicionar ou Atualizar)
   Future<void> _save() async {
-    if (_nameController.text.trim().isEmpty) return;
+    if (_nameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('O nome da marca não pode ser vazio.')),
+      );
+      return;
+    }
 
     try {
-      final currentBrands = await _service.getBrands();
-      final nextId = currentBrands.isEmpty
-          ? 1
-          : currentBrands
-                  .map((b) => int.tryParse(b['id'].toString()) ?? 0)
-                  .fold(0, max) +
-              1;
-
+      final name = _nameController.text.trim();
       final data = {
-        'id': _editingId ?? nextId.toString(),
-        'nome': _nameController.text.trim(),
+        // Usamos 'name' conforme a sua estrutura JSON
+        'name': name,
       };
 
       if (_editingId == null) {
+        // Se estiver adicionando, o BrandService cuida do ID sequencial.
         await _service.addBrand(data);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Marca adicionada com sucesso!')),
+          SnackBar(content: Text('Marca "$name" adicionada com sucesso!')),
         );
       } else {
+        // Se estiver editando, envia o ID para o service
         await _service.updateBrand(_editingId!, data);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Marca atualizada com sucesso!')),
+          SnackBar(content: Text('Marca "$name" atualizada com sucesso!')),
         );
       }
 
+      Navigator.pop(context); // Fecha o Dialog
       _nameController.clear();
       _editingId = null;
-      await _refresh();
+      await _refresh(); // Recarrega a lista após salvar
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Erro ao salvar marca: $e')),
@@ -66,24 +105,38 @@ class _BrandScreenState extends State<BrandScreen> {
     }
   }
 
-  void _editBrand(Map<String, dynamic> brand) {
-    setState(() {
-      _editingId = brand['id'].toString();
-      _nameController.text = brand['nome'] ?? '';
-    });
-  }
+  // Lógica de Deletar
+  Future<void> _deleteBrand(String id, String name) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmar Exclusão'),
+        content: Text('Tem certeza que deseja excluir a marca "$name"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Excluir', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
 
-  Future<void> _deleteBrand(String id) async {
-    try {
-      await _service.deleteBrand(id);
-      await _refresh();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Marca excluída com sucesso!')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro ao excluir marca: $e')),
-      );
+    if (confirmed == true) {
+      try {
+        await _service.deleteBrand(id);
+        await _refresh();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Marca "$name" excluída com sucesso!')),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao excluir marca: $e')),
+        );
+      }
     }
   }
 
@@ -91,95 +144,89 @@ class _BrandScreenState extends State<BrandScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Gerenciar Marcas'),
+        title: const Text('🏷️ Gerenciar Marcas'),
         backgroundColor: Colors.green,
+        // Adiciona um botão para atualizar a lista manualmente, se necessário
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _refresh,
+          ),
+        ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nome da Marca',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                ElevatedButton(
-                  onPressed: _save,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 14,
-                    ),
-                  ),
-                  child: Text(
-                    _editingId == null ? 'Adicionar' : 'Salvar',
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: _brands,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+      body: FutureBuilder<List<Map<String, dynamic>>>(
+        future: _brands,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-                  if (snapshot.hasError) {
-                    return Center(
-                      child: Text('Erro ao carregar marcas: ${snapshot.error}'),
-                    );
-                  }
-
-                  final brands = snapshot.data ?? [];
-                  if (brands.isEmpty) {
-                    return const Center(
-                      child: Text('Nenhuma marca cadastrada.'),
-                    );
-                  }
-
-                  return RefreshIndicator(
-                    onRefresh: _refresh,
-                    child: ListView.builder(
-                      itemCount: brands.length,
-                      itemBuilder: (context, i) {
-                        final b = brands[i];
-                        return Card(
-                          child: ListTile(
-                            title: Text(b['nome'] ?? 'Sem nome'),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.edit, color: Colors.orange),
-                                  onPressed: () => _editBrand(b),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.red),
-                                  onPressed: () => _deleteBrand(b['id'].toString()),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  );
-                },
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text('Erro ao carregar marcas: ${snapshot.error}'),
               ),
+            );
+          }
+
+          final brands = snapshot.data ?? [];
+          if (brands.isEmpty) {
+            return const Center(
+              child: Text('Nenhuma marca cadastrada. Use o "+" para adicionar.'),
+            );
+          }
+
+          // REQUISITO 3: Lista de marcas com opções de Alterar e Excluir
+          return RefreshIndicator(
+            onRefresh: _refresh,
+            child: ListView.builder(
+              padding: const EdgeInsets.all(8),
+              itemCount: brands.length,
+              itemBuilder: (context, i) {
+                final b = brands[i];
+                final id = b['id']?.toString() ?? '';
+                final name = b['name'] ?? 'Marca sem nome'; // CHAVE CORRIGIDA
+                
+                return Card(
+                  elevation: 2,
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      child: Text(id),
+                    ),
+                    title: Text(
+                      name,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Text('ID: $id'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Botão de Alterar (EDIT)
+                        IconButton(
+                          icon: const Icon(Icons.edit, color: Colors.orange),
+                          onPressed: () => _openSaveDialog(brand: b),
+                        ),
+                        // Botão de Excluir (DELETE)
+                        IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () => _deleteBrand(id, name),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
-          ],
-        ),
+          );
+        },
+      ),
+      // REQUISITO 2: FloatingActionButton para Inserir Marca
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _openSaveDialog(),
+        backgroundColor: Colors.blue,
+        child: const Icon(Icons.add),
       ),
     );
   }

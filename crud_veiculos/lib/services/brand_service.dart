@@ -37,22 +37,26 @@ class BrandService {
   Future<void> addBrand(Map<String, dynamic> newBrand) async {
     final brands = await getBrands();
 
+    // 1. Calcula o próximo ID sequencial
     final nextId = brands.isEmpty
         ? 1
         : brands
-                .map((b) => int.tryParse(b['id'].toString()) ?? 0)
-                .fold(0, max) +
+              .map((b) => int.tryParse(b['id'].toString()) ?? 0)
+              .fold(0, max) +
             1;
 
-    final nome = (newBrand['name'] ?? '').toString().trim().toLowerCase();
+    // 2. Verifica se a marca já existe (usando 'name' que é a chave que vem da tela)
+    final name = (newBrand['name'] ?? '').toString().trim().toLowerCase();
     final exists = brands.any(
-      (b) => (b['name'] ?? '').toString().trim().toLowerCase() == nome,
+      (b) => (b['name'] ?? '').toString().trim().toLowerCase() == name,
     );
     if (exists) throw Exception('Marca já cadastrada.');
 
-    newBrand['id'] = nextId;
+    // 3. Adiciona o ID calculado (convertido para String, para consistência com o que está no Bin)
+    newBrand['id'] = nextId.toString(); 
+    
+    // 4. Adiciona ao JSON local e atualiza o Bin
     brands.add(newBrand);
-
     await _updateRecord({'brands': brands});
   }
 
@@ -60,6 +64,11 @@ class BrandService {
     final brands = await getBrands();
     final index = brands.indexWhere((b) => b['id'].toString() == id);
     if (index == -1) throw Exception('Marca não encontrada');
+    
+    // Garantir que o ID não seja alterado durante a atualização
+    updatedBrand['id'] = id; 
+    
+    // Mescla o mapa existente com os novos dados
     brands[index] = {...brands[index], ...updatedBrand};
     await _updateRecord({'brands': brands});
   }

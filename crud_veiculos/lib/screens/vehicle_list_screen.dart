@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/vehicle_service.dart';
 import 'add_vehicle_screen.dart';
+import 'brand_screen.dart'; // ⬅️ IMPORTANTE: Importar a tela de Marcas
 
 class VehicleListScreen extends StatefulWidget {
   const VehicleListScreen({super.key});
@@ -30,12 +31,33 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
     _refresh();
   }
 
+  // Novo método para navegar para Gerenciar Marcas
+  void _goToBrandManagement() async {
+    // Abre a BrandScreen. O resultado (true/false) não afeta a lista de veículos
+    // diretamente, mas é bom manter a estrutura async.
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const BrandScreen()),
+    );
+    // Se você desejar, pode adicionar _refresh() aqui caso alterar marcas possa 
+    // afetar a visualização dos veículos que já estão na lista.
+    // Ex: _refresh(); 
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Veículos'),
         backgroundColor: Colors.green,
+        actions: [
+          // 🥇 REQUISITO 1: Opção para Gerenciar Marcas na tela de Listar Veículos
+          IconButton(
+            icon: const Icon(Icons.category, color: Colors.white),
+            tooltip: 'Gerenciar Marcas',
+            onPressed: _goToBrandManagement,
+          ),
+        ],
       ),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _vehicles,
@@ -44,7 +66,9 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return const Center(child: Text('Erro ao carregar veículos.'));
+            return Center(
+              child: Text('Erro ao carregar veículos: ${snapshot.error}'),
+            );
           }
 
           final data = snapshot.data ?? [];
@@ -85,7 +109,8 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
                             radius: 30,
                             child: Icon(Icons.directions_car, color: Colors.white),
                           ),
-                    title: Text('${v['tipoVeiculo']} - ${v['marca']}'),
+                    // Exibe a marca na lista
+                    title: Text('${v['tipoVeiculo']} - ${v['marca'] ?? 'Marca Desconhecida'}'),
                     subtitle: Text(
                       'Proprietário: ${v['proprietario']} | Ano: ${v['ano']}',
                     ),
